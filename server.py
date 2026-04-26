@@ -123,23 +123,63 @@ def handle_head(path, headers):
     idx = resp.find(b'\r\n\r\n')
     return resp[:idx+4] if idx != -1 else resp, status
 
+#------------------Client Thread---------------------
+def handle_client(conn, addr):
+    """Handle one client in a separate thread."""
+    ip = addr[0]
+    print(f"[+] Connected: {ip}:{addr[1]}")
 
-
-
-
-
-
-
-
+    try:
+        data = conn.recv(4096).decode()
+        if not data:
+            return
+        
+        method, path, headers, req_line = parse_request(data)
+        print(f"[Request] {req_line}")
+        
+        if method == 'GET':
+            resp, status = handle_get(path, headers)
+        elif method == 'HEAD':
+            resp, status = handle_head(path, headers)
+        else:
+            resp, status = error_400(), 400
+        
+        conn.sendall(resp)
+        write_log(ip, req_line, status)
+        print(f"[Response] {status}")
+        
+    except Exception as e:
+        print(f"[Error] {e}")
+    finally:
+        conn.close()
 
 
 def start():
-    """Start the server (placeholder)."""
-    print(f"Server starting at http://{HOST}:{PORT}")
-    print("Press Ctrl+C to stop")
+    """Start the multi-threaded web server."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((HOST, PORT))
+    sock.listen(10)
+    
+    print(f"Server running at http://{HOST}:{PORT}")
+    print("Press Ctrl+C to stop\n")
+    
+    try:
+        while True:
+            conn, addr = sock.accept()
+            t = threading.Thread(target=handle_client, args=(conn, addr))
+            t.daemon = True
+            t.start()
+    except KeyboardInterrupt:
+        print("\nServer stopped.")
+    finally:
+        sock.close()
+
+
 
  
 if __name__ == '__main__':
     if not os.path.exists(WWW_DIR):
         os.makedirs(WWW_DIR)
     start()
+
