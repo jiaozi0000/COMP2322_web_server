@@ -84,6 +84,44 @@ def error_404():
 def error_304():
     return build_response(304, 'text/html', b'')
 
+#-------------------Handle GET and HEAD---------------
+def handle_get(path, headers):
+    """Handle Get request."""
+    if path == '/':
+        path = '/index.html'
+    
+    safe = os.path.normpath(path.lstrip('/'))
+    full = os.path.join(WWW_DIR, safe)
+    
+    if not os.path.exists(full):
+        return error_404(), 404
+    
+    if not os.access(full, os.R_OK):
+        return error_403(), 403
+    
+    mtime = os.path.getmtime(full)
+    last_mod = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(mtime))
+    
+    if headers.get('If-Modified-Since') == last_mod:
+        return error_304(), 304
+    
+    mime = get_mime_type(full)
+    is_img = mime.startswith('image/')
+    
+    with open(full, 'rb' if is_img else 'r', encoding=None if is_img else 'utf-8') as f:
+        body = f.read()
+    
+    if not is_img:
+        body = body.encode()
+    
+    return build_response(200, mime, body, {'Last-Modified': last_mod}), 200
+
+
+def handle_head(path, headers):
+    """Handle HEAD request."""
+    resp, status = handle_get(path, headers)
+    idx = resp.find(b'\r\n\r\n')
+    return resp[:idx+4] if idx != -1 else resp, status
 
 
 
